@@ -1,3 +1,8 @@
+/**
+ * THIS IS UNUSED, IT was a earlier version of my bot, but it had issues with performance. Not being fast enough, the original idea can be seen here and in Video.java
+ */
+
+
 class Bot {
     private final VideoCategory myCategory;
     private Video video;

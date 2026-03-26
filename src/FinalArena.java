@@ -18,15 +18,16 @@ public class FinalArena {
     }
 
     // ==========================================
-    // 1. HAL-9000 (IMPROVED) - Fixed for Arena
+    // 1. HAL-9000 (MARGINAL UTILITY)
     // ==========================================
     static class HAL9000_Improved implements Competitor {
+        private double totalPoints = 0;
         private int totalSpent = 0;
         private int rounds = 0;
-        private double marketCeiling = 65.0; // Start higher to compete immediately
+        private double marketCeiling = 65.0;
         private final Category myCat = Category.VIDEO_GAMES;
 
-        public String getName() { return "HAL-9000 (Improved)"; }
+        public String getName() { return "HAL-9000 (Marginal-Utility)"; }
         public Category getCategory() { return myCat; }
 
         @Override
@@ -34,7 +35,7 @@ public class FinalArena {
             this.rounds++;
             if (eb <= 0) return new int[]{1, 0};
 
-            // Fast parsing
+            // Fast Parsing
             long views = 0;
             int vStart = data.indexOf('=') + 1;
             int vEnd = data.indexOf(',', vStart);
@@ -54,19 +55,29 @@ public class FinalArena {
 
             boolean isMyCat = data.contains(myCat.name());
             double match = isMyCat ? 1.0 : 0.161;
-            double estValue = base * match * 1.9;
+            double expectedVal = base * match * 1.8;
+
+            // Current Efficiency Score
+            double currentScore = totalPoints / Math.max(totalSpent, SPEND_FLOOR);
 
             int bidValue;
             if (totalSpent < SPEND_FLOOR) {
-                // AGGRESSION: Bid on anything with decent potential or your own cat
-                // Lowered 25 -> 10 so it actually bids the ceiling on most videos
-                if (isMyCat || estValue > 10) {
-                    bidValue = (int)marketCeiling + 1;
+                // PHASE 1: BULLY (Fast 30% spend)
+                if (isMyCat || base > 25) {
+                    bidValue = (int)marketCeiling + 2;
                 } else {
-                    bidValue = 15; // Increased low-ball to catch cheap outliers
+                    bidValue = 12;
                 }
             } else {
-                bidValue = (int)(estValue * 0.95);
+                // PHASE 2: MARGINAL GAIN (Winning = Overpaying)
+                // We demand a 1.5x efficiency jump over our current average
+                int breakEvenBid = (currentScore > 0.05) ? (int)(expectedVal / (currentScore * 1.5)) : (int)expectedVal;
+
+                // Hard caps to ensure denominator protection
+                int selectiveCap = isMyCat ? 55 : 25;
+                bidValue = Math.min(breakEvenBid, selectiveCap);
+
+                if (expectedVal < 5) bidValue = 1;
             }
 
             return new int[]{1, Math.min(eb, Math.max(1, bidValue))};
@@ -74,57 +85,24 @@ public class FinalArena {
 
         @Override
         public void handleResult(boolean won, int paid, int points, int h) {
-            // High initial learning rate for fast adaptation
-            double lr = Math.max(0.5, 15.0 * (1.0 - (double)rounds / 70000.0));
+            double lr = Math.max(0.2, 15.0 * (1.0 - (double)rounds / 90000.0));
             if (won) {
                 this.totalSpent += paid;
-                if (totalSpent < SPEND_FLOOR) marketCeiling -= (lr * 0.1);
+                this.totalPoints += points;
+                // Win-Shaving: If we won, we likely overpaid. Pull ceiling down.
+                if (totalSpent < SPEND_FLOOR) marketCeiling -= (lr * 0.25);
             } else {
-                if (totalSpent < SPEND_FLOOR) {
-                    // h is the actual highest bid from the winner
+                // Only push the ceiling up if we are lagging behind the 30% floor pace
+                double targetPace = rounds * (SPEND_FLOOR / TOTAL_ROUNDS);
+                if (totalSpent < targetPace) {
                     marketCeiling = Math.max(marketCeiling + lr, h + 1);
                 }
             }
             if (marketCeiling > 250) marketCeiling = 250;
+            if (marketCeiling < 15) marketCeiling = 15;
         }
     }
 
-    // ==========================================
-    // 2. HAL-9000 (ORIGINAL)
-    // ==========================================
-    static class HAL9000 implements Competitor {
-        private int totalSpent = 0;
-        private int marketCeiling = 60;
-        private final Category myCat = Category.VIDEO_GAMES;
-        private final TreeMap<Long, Double> brain = new TreeMap<>();
-
-        HAL9000() { for(int i=0; i<10; i++) brain.put(THRESHOLDS[i], ORIG_VALS[i]); }
-        public String getName() { return "HAL-9000 (Original)"; }
-        public Category getCategory() { return myCat; }
-
-        public int[] getBid(String data, int eb) {
-            if (eb <= 0) return new int[]{1, 0};
-            long v = Long.parseLong(data.split("v=")[1].split(",")[0]);
-            double base = brain.floorEntry(v).getValue();
-            boolean isMyCat = data.contains(myCat.name());
-            double estValue = base * (isMyCat ? 1.0 : 0.161) * 1.8;
-
-            int bidValue;
-            if (totalSpent < SPEND_FLOOR) {
-                bidValue = (isMyCat || estValue > 35) ? marketCeiling + 1 : 12;
-            } else {
-                bidValue = (int)(estValue * 0.85);
-            }
-            return new int[]{1, Math.min(eb, bidValue)};
-        }
-
-        public void handleResult(boolean won, int paid, int points, int h) {
-            if (!won) marketCeiling = Math.max(marketCeiling, h);
-            if (won) { totalSpent += paid; }
-        }
-    }
-
-    // Rest of your bots (Vampire, Bully, etc.) go here...
     static class VampireBot implements Competitor {
         private int marketCeiling = 60;
         public String getName() { return "The-Vampire"; }
@@ -173,8 +151,7 @@ public class FinalArena {
         }
 
         List<Competitor> bots = new ArrayList<>();
-        bots.add(new HAL9000_Improved()); // NOW WORKS
-        bots.add(new HAL9000());
+        bots.add(new HAL9000_Improved());
         bots.add(new VampireBot());
         bots.add(new AdaptiveBully());
         bots.add(new StaticCompetitor("Steady-45", Category.SPORTS, 45));
